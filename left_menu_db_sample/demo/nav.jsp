@@ -1,0 +1,252 @@
+<%@
+	page language="java" contentType="text/html;charset=UTF-8"
+	import="java.sql.*" import="java.util.Date"
+	import="java.text.SimpleDateFormat" import="org.json.simple.JSONArray"
+	import="org.json.simple.JSONObject"%>
+<% request.setCharacterEncoding("euc-kr");%>
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+	<meta name="robots" content="noindex,follow">
+	<script src="../lib/jquery.js"></script>
+	<script src="../src/jquery-ui-dependencies/jquery.fancytree.ui-deps.js"></script>
+
+	<link href="../src/skin-win8/ui.fancytree.css" rel="stylesheet">
+	<script src="../src/jquery.fancytree.js"></script>
+	<script src="sample.js"></script>
+	<title>Fancytree - Example Browser Nav</title>
+
+<style type="text/css">
+body {
+	background-color: #f7f7f7;
+	/* background-color: #39414A;
+	color: white; */
+	font-family: Helvetica, Arial, sans-serif;
+	font-size: smaller;
+	/* background-image: url("nav_bg.png"); */
+	/* background-repeat: repeat-x; */
+}
+div#tree {
+	position: absolute;
+	height: 95%;
+	width: 95%;
+	padding: 5px;
+	margin-right: 16px;
+}
+ul.fancytree-container {
+	height: 100%;
+	width: 100%;
+	overflow: auto;
+	background-color: transparent;
+}
+span.fancytree-node span.fancytree-title {
+	/* color: white; */
+	text-decoration: none;
+}
+/* span.fancytree-focused span.fancytree-title {
+	outline-color: white;
+} */
+span.fancytree-node:hover span.fancytree-title,
+span.fancytree-active span.fancytree-title,
+span.fancytree-active.fancytree-focused span.fancytree-title,
+.fancytree-treefocus span.fancytree-title:hover,
+.fancytree-treefocus span.fancytree-active span.fancytree-title {
+	color: #39414A;
+}
+span.external span.fancytree-title:after {
+	content: "";
+	background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAMAAAC67D+PAAAAFVBMVEVmmcwzmcyZzP8AZswAZv////////9E6giVAAAAB3RSTlP///////8AGksDRgAAADhJREFUGFcly0ESAEAEA0Ei6/9P3sEcVB8kmrwFyni0bOeyyDpy9JTLEaOhQq7Ongf5FeMhHS/4AVnsAZubxDVmAAAAAElFTkSuQmCC") 100% 50% no-repeat;
+	padding-right: 13px;
+}
+/* Remove system outline for focused container */
+.ui-fancytree.fancytree-container:focus {
+	outline: none;
+}
+.ui-fancytree.fancytree-container {
+	border: none;
+}
+</style>
+
+<script type="text/javascript">
+$(function(){
+	// --- Initialize sample trees
+	$("#tree").fancytree({
+		treeId: "nav",
+		autoActivate: false, // we use scheduleAction()
+		autoCollapse: true,
+//			autoFocus: true,
+		autoScroll: true,
+		clickFolderMode: 3, // expand with single click
+		minExpandLevel: 2,
+		tabindex: "-1", // we don't want the focus frame
+		// toggleEffect: { effect: "blind", options: {direction: "vertical", scale: "box"}, duration: 2000 },
+		// scrollParent: null, // use $container
+		tooltip: function(event, data) {
+			return data.node.title;
+		},
+		focus: function(event, data) {
+			var node = data.node;
+			// Auto-activate focused node after 1 second
+			if(node.data.href){
+				node.scheduleAction("activate", 1000);
+			}
+		},
+		blur: function(event, data) {
+			data.node.scheduleAction("cancel");
+		},
+		beforeActivate: function(event, data){
+			var node = data.node;
+
+			if( node.data.href && node.data.target === "_blank") {
+				window.open(node.data.href, "_blank");
+				return false; // don't activate
+			}
+		},
+		activate: function(event, data){
+			var node = data.node,
+				orgEvent = data.originalEvent || {};
+
+			// Open href (force new window if Ctrl is pressed)
+			if(node.data.href){
+				window.open(node.data.href, (orgEvent.ctrlKey || orgEvent.metaKey) ? "_blank" : node.data.target);
+			}
+			// When an external link was clicked, we don't want the node to become
+			// active. Also the URL fragment should not be changed
+			if( node.data.target === "_blank") {
+				return false;
+			}
+			// Append #HREF to URL without actually loading content
+			// (We check for this value on page load re-activate the node.)
+			if( window.parent &&  parent.history && parent.history.pushState ) {
+				parent.history.pushState({title: node.title}, "", "#" + (node.data.href || ""));
+			}
+		},
+		click: function(event, data){
+			// We implement this in the `click` event, because `activate` is not
+			// triggered if the node already was active.
+			// We want to allow re-loads by clicking again.
+			var node = data.node,
+				orgEvent = data.originalEvent;
+
+			// Open href (force new window if Ctrl is pressed)
+			if(node.isActive() && node.data.href){
+				window.open(node.data.href, (orgEvent.ctrlKey || orgEvent.metaKey) ? "_blank" : node.data.target);
+			}
+		}
+	});
+	// On page load, activate node if node.data.href matches the url#href
+	var tree = $.ui.fancytree.getTree(),
+		frameHash = window.parent && window.parent.location.hash;
+
+	if( frameHash ) {
+		frameHash = frameHash.replace("#", "");
+		tree.visit(function(n) {
+			if( n.data.href && n.data.href === frameHash ) {
+				n.setActive();
+				return false; // done: break traversal
+			}
+		});
+	}
+});
+
+</script>
+
+</head>
+
+<%
+	Connection conn = null;
+	Statement stmt = null;
+
+	try {
+		// String id = request.getParameter("id");                        // request에서 id 파라미터를 가져온다
+		// String passwd = request.getParameter("pw");      // request에서 passwd 파라미터를 가져온다.
+
+		String url = "jdbc:postgresql://itfactoryddns.iptime.org:5432/AJINELEC_MES";
+		String usr = "postgres";
+		String pwd = "postgres";
+		Class.forName("org.postgresql.Driver");
+
+		// System.out.println("+ id : " + id);
+		// System.out.println("+ pw : " + passwd);
+
+		conn = DriverManager.getConnection(url, usr, pwd);
+		stmt = conn.createStatement();
+
+		String query = "select z.clm_menu_folder_condition, z.clm_menu_end_yn, z.clm_menu_id, z.clm_menu_level_01_id, z.clm_menu_level_02_id, z.clm_menu_level_01_name, z.clm_menu_level_02_name, z.clm_menu_permission, z.clm_comment, z.clm_reg_datetime, z.clm_reg_user, z.clm_update_datetime, z.clm_update_user, z.clm_menu_level_01_url, z.clm_menu_level_02_url from tbl_menu_level_info z group by z.clm_menu_id, z.clm_menu_level_01_id, z.clm_menu_level_02_id, z.clm_menu_level_01_name, z.clm_menu_level_02_name, z.clm_menu_permission, z.clm_comment, z.clm_reg_datetime, z.clm_reg_user, z.clm_update_datetime, z.clm_update_user, z.clm_menu_level_01_url, z.clm_menu_level_02_url, z.clm_menu_end_yn, z.clm_menu_folder_condition order by z.clm_menu_id";
+		System.out.println("+ query : " + query);
+		ResultSet rs = stmt.executeQuery(query);
+		JSONObject jsonMain = new JSONObject();
+		JSONObject jObject = null;
+		JSONArray jArray = new JSONArray();
+%>
+
+<body>
+	<div id="tree">
+	<ul>
+		<li class="folder expanded"> Examples
+			<ul>
+				<li><a target="content" href="welcome.html">Welcome</a></li>
+<%
+		int iRowCount = 0;
+		String clm_menu_level_01_id_tmp = "";
+		String clm_menu_level_01_id = "";
+		String clm_menu_level_02_id = "";
+		String clm_menu_level_01_name = "";
+		String clm_menu_level_02_name = "";
+		String clm_menu_end_yn = "N";
+		String clm_menu_folder_condition = "C";
+		while (rs.next()) {
+			if(iRowCount==0) {
+				clm_menu_level_01_id_tmp = rs.getString("clm_menu_level_01_id");
+			}
+			clm_menu_level_01_id = rs.getString("clm_menu_level_01_id");
+			clm_menu_level_02_id = rs.getString("clm_menu_level_02_id");
+			clm_menu_level_01_name = rs.getString("clm_menu_level_01_name");
+			clm_menu_level_02_name = rs.getString("clm_menu_level_02_name");
+			clm_menu_end_yn = rs.getString("clm_menu_end_yn");
+			clm_menu_folder_condition = rs.getString("clm_menu_folder_condition");
+
+			if(clm_menu_level_02_id.equals("000")) {
+				clm_menu_folder_condition = (clm_menu_folder_condition.equals("O"))?"folder expanded":"folder";
+%>
+	<li class="<%=clm_menu_folder_condition %>"> <%=clm_menu_level_01_name %>
+		<ul>
+<%
+			}
+			if(!clm_menu_level_02_id.equals("000")) {
+%>
+			<li><a target="content" href="welcome.html"><%=clm_menu_level_02_name %></a></li>
+<%
+			}
+			if(clm_menu_end_yn.equals("Y")) {
+%>
+		</ul>
+	</li>
+<%
+			}
+			// System.out.println("> " + clm_menu_level_01_id_tmp + " " + clm_menu_level_01_id + " " + clm_menu_level_02_id + " " + (!clm_menu_level_01_id.equals(clm_menu_level_01_id_tmp)));
+			clm_menu_level_01_id_tmp = clm_menu_level_01_id;
+			iRowCount++;
+		}
+%>
+			</ul>
+		</li>
+	</ul>
+	</div>
+</body>
+
+<%
+	}
+	catch(Exception e)  {
+		System.out.println("> e " + e.toString());
+	}
+	finally {
+		if(conn!=null && stmt!=null) {
+			stmt.close();
+			conn.close();
+		}
+	}
+%>
+
+</html>
